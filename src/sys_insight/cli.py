@@ -233,7 +233,3 @@ def main() -> None:
         #renderer.draw(labels, data)
         renderer.draw(plot)
         time.sleep(args.interval)
-
-
-if __name__ == "__main__":
-    main()

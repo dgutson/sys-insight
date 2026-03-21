@@ -1,10 +1,42 @@
-# Python-generated files
+# Python
 __pycache__/
-*.py[oc]
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments (uv puede usar .venv)
+.venv/
+venv/
+env/
+
+# Packaging
 build/
 dist/
-wheels/
-*.egg-info
+*.egg-info/
 
-# Virtual environments
-.venv
+# Caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pylint.d/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Matplotlib (por si genera configs locales)
+.matplotlib/
+
+# Logs / temp
+*.log
+tmp/
