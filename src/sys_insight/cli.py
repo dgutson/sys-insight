@@ -7,6 +7,9 @@ import time
 
 import matplotlib.pyplot as plt
 
+from sys_insight.providers import MetricProvider, CPUPerProcessProvider, MemPerProcessProvider
+from sys_insight.sampler import Sampler
+from sys_insight.renderer import StackedRenderer
 
 # ---------- Types ----------
 
@@ -14,10 +17,6 @@ type PID = int
 type MetricValue = float
 type TimeSeries = list[float]
 type Label = str
-
-from sys_insight.providers import MetricProvider, CPUPerProcessProvider, MemPerProcessProvider
-from sys_insight.sampler import Sampler
-from sys_insight.renderer import StackedRenderer
 
 # ---------- CLI ----------
 
