@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import override
 
-from sys_insight.models import MetricSample, PID
+from sys_insight.models import MetricValue, MetricSample, PID
 
 
 class MetricProvider(ABC):
@@ -26,83 +26,86 @@ class ProcMeta:
             return "?"
 
 
-class CPUPerProcessProvider(MetricProvider):
-    def __init__(self) -> None:
-        self._prev: dict[PID, int] = {}
-
-    @staticmethod
-    def _read_stat(pid: PID) -> int | None:
-        try:
-            # pylint: disable=unspecified-encoding
-            with open(f"/proc/{pid}/stat") as f:
-                parts = f.read().split()
-            return int(parts[13]) + int(parts[14])
-
-        # pylint: disable=broad-exception-caught
-        except Exception:
-            return None
+class ProcMetricProvider(MetricProvider):
+    @abstractmethod
+    def _read_proc_value(self, pid: PID) -> MetricValue | None:
+        ...
 
     @override
     def read(self) -> MetricSample:
-        curr: dict[PID, int] = {}
+        values: dict[PID, MetricValue] = {}
 
-        for p in Path("/proc").iterdir():
-            if not p.name.isdigit():
-                continue
+        def _read_values() -> dict[PID, MetricValue]:
+            for p in Path("/proc").iterdir():
+                if not p.name.isdigit():
+                    continue
 
-            pid = int(p.name)
-            val = self._read_stat(pid)
-            if val is not None:
-                curr[pid] = val
+                pid = int(p.name)
+                value = self._read_proc_value(pid)
+                if value is not None:
+                    values[pid] = value
+            return values
 
-        deltas: dict[PID, float] = {}
-
-        for pid, val in curr.items():
-            prev = self._prev.get(pid)
-            if prev is None:
-                continue
-
-            d = val - prev
-            if d > 0:
-                deltas[pid] = float(d)
-
-        self._prev = curr
-
-        total = sum(deltas.values()) or 1.0
-
-        return MetricSample(
-            {pid: v / total for pid, v in deltas.items()}
-        )
-
-
-class MemPerProcessProvider(MetricProvider):
-    @staticmethod
-    def _read_rss(pid: PID) -> int | None:
-        try:
-            # pylint: disable=unspecified-encoding
-            with open(f"/proc/{pid}/statm") as f:
-                parts = f.read().split()
-            return int(parts[1])
-
-        # pylint: disable=broad-exception-caught
-        except Exception:
-            return None
-
-    @override
-    def read(self) -> MetricSample:
-        values: dict[PID, float] = {}
-
-        for p in Path("/proc").iterdir():
-            if not p.name.isdigit():
-                continue
-
-            pid = int(p.name)
-            rss = self._read_rss(pid)
-            if rss is not None:
-                values[pid] = float(rss)
-
+        values = _read_values()
         total = sum(values.values()) or 1.0
 
         return MetricSample(
             {pid: v / total for pid, v in values.items()}
         )
+
+class ProcDeltaMetricProvider(ProcMetricProvider):
+    @abstractmethod
+    def _read_current_prov_value(self, pid: PID) -> MetricValue | None:
+        ...
+
+    def __init__(self) -> None:
+        self.old_values: dict[PID, MetricValue | None] = {}
+
+    @staticmethod
+    def _ignore_negative(delta: MetricValue) -> MetricValue | None:
+        return delta if delta > 0.0 else None
+
+    @override
+    def _read_proc_value(self, pid: PID) -> MetricValue | None:
+        current = self._read_current_prov_value(pid)
+        delta : MetricValue | None = None
+
+        if current is not None:
+            old = self.old_values.get(pid)
+            if old is not None:
+                delta = self._ignore_negative(current - old)
+            # else: this means that there is no prev value. Wait until the second.
+
+        self.old_values[pid] = current
+
+        return delta
+
+
+# Implementations:
+
+class CPUPerProcessProvider(ProcDeltaMetricProvider):
+    @override
+    def _read_current_prov_value(self, pid: PID) -> MetricValue | None:
+        try:
+            # pylint: disable=unspecified-encoding
+            with open(f"/proc/{pid}/stat") as f:
+                parts = f.read().split()
+            return MetricValue(parts[13]) + MetricValue(parts[14])
+
+        # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
+
+
+class MemPerProcessProvider(ProcMetricProvider):
+    @override
+    def _read_proc_value(self, pid: PID) -> MetricValue | None:
+        try:
+            # pylint: disable=unspecified-encoding
+            with open(f"/proc/{pid}/statm") as f:
+                parts = f.read().split()
+            return MetricValue(parts[1])
+
+        # pylint: disable=broad-exception-caught
+        except Exception:
+            return None

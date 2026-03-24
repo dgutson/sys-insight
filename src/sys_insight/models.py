@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import NamedTuple, TypeAlias
 
 type PID = int
-type MetricValue = float
+MetricValue: TypeAlias = float
 type TimeSeries = list[float]
 type Label = str
 
