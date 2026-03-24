@@ -31,6 +31,35 @@ class ProcMetricProvider(MetricProvider):
     def _read_proc_value(self, pid: PID) -> MetricValue | None:
         ...
 
+    # Helper function
+    @staticmethod
+    def _read_proc_file_parts(
+        pid: PID,
+        file_name: str,
+        skip_first_paren_field: bool = False,
+    ) -> list[str] | None:
+        try:
+            # pylint: disable=unspecified-encoding
+            with open(f"/proc/{pid}/{file_name}") as f:
+                data = f.read()
+
+            if not skip_first_paren_field:
+                return data.split()
+
+            # handle cases like: pid (comm) ...
+            lpar = data.find("(")
+            rpar = data.rfind(")")
+
+            if lpar == -1 or rpar == -1 or rpar < lpar:
+                return None  # unexpected format
+
+            after = data[rpar + 2 :]  # skip ") "
+            return after.split()
+
+        # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
+
     @override
     def read(self) -> MetricSample:
         values: dict[PID, MetricValue] = {}
@@ -86,26 +115,18 @@ class ProcDeltaMetricProvider(ProcMetricProvider):
 class CPUPerProcessProvider(ProcDeltaMetricProvider):
     @override
     def _read_current_prov_value(self, pid: PID) -> MetricValue | None:
-        try:
-            # pylint: disable=unspecified-encoding
-            with open(f"/proc/{pid}/stat") as f:
-                parts = f.read().split()
-            return MetricValue(parts[13]) + MetricValue(parts[14])
+        parts = self._read_proc_file_parts(pid, "stat", True)
+        if parts:
+            return MetricValue(parts[11]) + MetricValue(parts[12])
 
-        # pylint: disable=broad-exception-caught
-        except Exception:
-            return None
+        return None
 
 
 class MemPerProcessProvider(ProcMetricProvider):
     @override
     def _read_proc_value(self, pid: PID) -> MetricValue | None:
-        try:
-            # pylint: disable=unspecified-encoding
-            with open(f"/proc/{pid}/statm") as f:
-                parts = f.read().split()
+        parts = self._read_proc_file_parts(pid, "statm")
+        if parts:
             return MetricValue(parts[1])
 
-        # pylint: disable=broad-exception-caught
-        except Exception:
-            return None
+        return None
